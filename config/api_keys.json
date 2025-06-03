@@ -1,0 +1,12 @@
+{
+    "gemini": {
+        "api_key": "AIzaSyCWBX2ZUFzRwaf8-ab6m39N5zxX7caNSgw"
+    },
+    "amadeus": {
+        "client_id": "6ql7dA2lUvl2tMvpSkKbtAgKP8w6OcG2",
+        "client_secret": "txo9GNKAGGVmH2wi"
+    },
+    "weather": {
+        "api_key": "6393ee67d353487187235741252905"
+    }
+} 
