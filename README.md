@@ -38,3 +38,49 @@ echo '{
   "weather": {"api_key": "YOUR_WEATHERAPI_KEY"}
 }' > config/api_keys.json
 ```
+
+## Building & Running :computer:
+### Compile (adjust include/library paths as needed)
+```
+g++ -std=c++17 src/*.cpp -I include -I "path/to/curl/include" -L "path/to/curl/lib" -lcurl -o travel_planner
+```
+
+### Run
+```
+./travel_planner
+```
+
+## Sample Workflow :arrow_forward:
+1. Register with username/email
+2. Enter destination city (e.g., "Paris")
+3. View weather forecast
+4. Set travel dates (YYYY-MM-DD)
+5. Choose flights:
+   - Outbound journey (groups connecting flights)
+   - Return journey
+6. Select hotel from recommendations
+7. Generate personalized itinerary
+8. View complete travel plan with cost breakdown
+
+## Project Structure :file_folder:
+```
+TravelPlanner/
+├── config/
+│   └── api_keys.json       # API credentials
+├── include/                # Header files
+│   ├── api_handler.hpp     # API integration
+│   ├── flight.hpp          # Flight data model
+│   ├── hotel.hpp           # Hotel data model
+│   ├── itinerary_item.hpp  # Day plans
+│   ├── trip.hpp            # Trip container
+│   └── user.hpp            # User profile
+├── src/                    # Implementation
+│   ├── api_handler.cpp     # API logic
+│   ├── flight.cpp          # Flight methods
+│   ├── hotel.cpp           # Hotel methods
+│   ├── itinerary_item.cpp  # Itinerary methods
+│   ├── main.cpp            # Entry point
+│   ├── trip.cpp            # Trip management
+│   └── user.cpp            # User operations
+└── travel_planner          # Compiled binary
+```
