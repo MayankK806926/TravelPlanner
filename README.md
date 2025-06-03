@@ -84,3 +84,154 @@ TravelPlanner/
 │   └── user.cpp            # User operations
 └── travel_planner          # Compiled binary
 ```
+## Exmaple of TravelPlanner
+```
+=== Your Complete Travel Plan ===
+
+Trip Details:
+Destination: Bangalore
+Dates: 2025-06-04 to 2025-06-10
+People: 4
+Budget: 48739.00 INR
+
+Selected Outbound Journey:
+  Leg 1: AI 2803
+DEL (2025-06-04 06:25) to BLR (2025-06-04 09:25)
+Price: 3085.00 INR
+Available seats: 9
+
+Selected Return Journey:
+  Leg 1: AI 2804
+BLR (2025-06-10 10:20) to DEL (2025-06-10 13:15)
+Price: 3099.00 INR
+Available seats: 9
+
+Selected Hotel:
+Hotel: The Taj West End
+Rating: 5.00 stars
+Total Stay Cost: 6000.00 INR
+Address: 25, Race Course Road, Bengaluru, Karnataka 560001, India
+
+Daily Itinerary:
+
+Itinerary for Bangalore:
+Date: 2025-06-04
+Time: 14:00
+Activity: Check-in at The Taj West End
+Category: Accommodation
+-------------------
+Date: 2025-06-04
+Time: 10:00
+Activity: Visit Bangalore Palace
+Category: Sightseeing
+-------------------
+Date: 2025-06-04
+Time: 10:30
+Activity: Modeled after Windsor Castle, it showcases Tudor architecture and houses historical artifacts.
+Category: Information
+-------------------
+Date: 2025-06-04
+Time: 09:30
+Activity: Transportation: Auto-rickshaw or cab from city center.
+Category: Transport
+-------------------
+Date: 2025-06-05
+Time: 10:00
+Activity: Visit Tipu Sultan's Summer Palace
+Category: Sightseeing
+-------------------
+Date: 2025-06-05
+Time: 10:30
+Activity: A beautiful wooden structure built in the Indo-Islamic style, used as Tipu Sultan's summer retreat.
+Category: Information
+-------------------
+Date: 2025-06-05
+Time: 09:30
+Activity: Transportation: Metro (nearest station is KR Market) or bus.
+Category: Transport
+-------------------
+Date: 2025-06-06
+Time: 10:00
+Activity: Visit Lal Bagh Botanical Garden
+Category: Sightseeing
+-------------------
+Date: 2025-06-06
+Time: 10:30
+Activity: A sprawling botanical garden with diverse flora, a glasshouse, and a historical rock formation.
+Category: Information
+-------------------
+Date: 2025-06-06
+Time: 09:30
+Activity: Transportation: Metro (Lal Bagh station) or bus.
+Category: Transport
+-------------------
+Date: 2025-06-07
+Time: 10:00
+Activity: Visit Vidhana Soudha
+Category: Sightseeing
+-------------------
+Date: 2025-06-07
+Time: 10:30
+Activity: An impressive neo-Dravidian granite building housing the Karnataka State Legislative Assembly.
+Category: Information
+-------------------
+Date: 2025-06-07
+Time: 09:30
+Activity: Transportation: Metro (nearest station is Vidhana Soudha) or bus.
+Category: Transport
+-------------------
+Date: 2025-06-08
+Time: 10:00
+Activity: Visit ISKCON Temple Bangalore
+Category: Sightseeing
+-------------------
+Date: 2025-06-08
+Time: 10:30
+Activity: A magnificent temple dedicated to Lord Krishna, known for its spiritual atmosphere and architectural grandeur.
+Category: Information
+-------------------
+Date: 2025-06-08
+Time: 09:30
+Activity: Transportation: Bus or auto-rickshaw from city center.
+Category: Transport
+-------------------
+Date: 2025-06-09
+Time: 10:00
+Activity: Visit Cubbon Park
+Category: Sightseeing
+-------------------
+Date: 2025-06-09
+Time: 10:30
+Activity: A green lung in the city center, offering walking paths, gardens, and historical buildings.
+Category: Information
+-------------------
+Date: 2025-06-09
+Time: 09:30
+Activity: Transportation: Metro (nearest station is Cubbon Park) or bus.
+Category: Transport
+-------------------
+Date: 2025-06-10
+Time: 10:00
+Activity: Visit Commercial Street
+Category: Sightseeing
+-------------------
+Date: 2025-06-10
+Time: 10:30
+Activity: A bustling street known for its diverse shopping options, from clothing to accessories.
+Category: Information
+-------------------
+Date: 2025-06-10
+Time: 09:30
+Activity: Transportation: Auto-rickshaw or bus from city center.
+Category: Transport
+-------------------
+Date: 2025-06-10
+Time: 11:00
+Activity: Check-out from The Taj West End
+Category: Accommodation
+-------------------
+
+Total Trip Cost: 48739.00 INR
+
+Thank you for using our service! Happy Journey!
+```
