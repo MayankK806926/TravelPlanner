@@ -84,7 +84,7 @@ TravelPlanner/
 │   └── user.cpp            # User operations
 └── travel_planner          # Compiled binary
 ```
-## Exmaple of TravelPlanner
+## Exmaple of plan prepared by TravelPlanner
 ```
 === Your Complete Travel Plan ===
 
