@@ -3,15 +3,15 @@
 #include <iomanip> // for setprecision
 using namespace std;
 
-Hotel::Hotel(string n, string loc, double price, double rat, 
-             string checkIn, string checkOut, string addr)
+Hotel::Hotel(string n, string loc, double price, double rat,
+             string checkIn, string checkOut, string addr, string currency)
     : name(n), location(loc), pricePerNight(price), rating(rat),
-      checkInDate(checkIn), checkOutDate(checkOut), address(addr) {}
+      checkInDate(checkIn), checkOutDate(checkOut), address(addr), currency(currency) {}
 
 void Hotel::displayInfo() const {
     cout << "Hotel: " << name << endl;
     cout << "Rating: " << rating << " stars" << endl;
-    cout << "Total Stay Cost: " << fixed << setprecision(2) << pricePerNight << " INR" << endl;
+    cout << "Total Stay Cost: " << fixed << setprecision(2) << pricePerNight << " " << currency << endl;
     cout << "Address: " << address << endl;
 }
 

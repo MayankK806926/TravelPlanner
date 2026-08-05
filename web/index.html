@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TravelPlanner Demo</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.5rem; }
+  section { margin-bottom: 28px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
+  label { display: block; margin: 8px 0 4px; font-size: 0.85rem; color: #555; }
+  input { width: 100%; padding: 6px 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  button { margin-top: 12px; padding: 8px 16px; border: 0; border-radius: 4px; background: #2563eb; color: white; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .error { color: #b91c1c; }
+</style>
+</head>
+<body>
+<h1>TravelPlanner API Demo</h1>
+<p>Talks directly to the running <code>travel_planner_server</code> REST API on this same host.</p>
+
+<section>
+  <h2>Weather</h2>
+  <div class="row">
+    <div><label>City</label><input id="w-city" value="Bangalore"></div>
+    <div><label>Days</label><input id="w-days" type="number" value="3" min="1" max="14"></div>
+  </div>
+  <button onclick="callWeather()">Fetch weather</button>
+  <pre id="w-out"></pre>
+</section>
+
+<section>
+  <h2>Flights</h2>
+  <div class="row">
+    <div><label>From</label><input id="f-from" value="Delhi"></div>
+    <div><label>To</label><input id="f-to" value="Bangalore"></div>
+  </div>
+  <div class="row">
+    <div><label>Date (YYYY-MM-DD)</label><input id="f-date" value="2026-09-10"></div>
+    <div><label>Passengers</label><input id="f-pax" type="number" value="1" min="1"></div>
+  </div>
+  <button onclick="callFlights()">Search flights</button>
+  <pre id="f-out"></pre>
+</section>
+
+<section>
+  <h2>Hotels</h2>
+  <div class="row">
+    <div><label>City</label><input id="h-city" value="Bangalore"></div>
+    <div><label>Guests</label><input id="h-guests" type="number" value="2" min="1"></div>
+  </div>
+  <div class="row">
+    <div><label>Check-in</label><input id="h-in" value="2026-09-10"></div>
+    <div><label>Check-out</label><input id="h-out" value="2026-09-15"></div>
+  </div>
+  <button onclick="callHotels()">Search hotels</button>
+  <pre id="h-out"></pre>
+</section>
+
+<section>
+  <h2>Itinerary</h2>
+  <div class="row">
+    <div><label>Destination</label><input id="i-dest" value="Bangalore"></div>
+    <div><label>Hotel name</label><input id="i-hotel" value="Demo Hotel"></div>
+  </div>
+  <div class="row">
+    <div><label>Start</label><input id="i-start" value="2026-09-10"></div>
+    <div><label>End</label><input id="i-end" value="2026-09-12"></div>
+  </div>
+  <div class="row">
+    <div><label>People</label><input id="i-people" type="number" value="2"></div>
+    <div><label>Budget</label><input id="i-budget" type="number" value="50000"></div>
+  </div>
+  <button onclick="callItinerary()">Generate itinerary</button>
+  <pre id="i-out"></pre>
+</section>
+
+<script>
+async function callAPI(url, outId) {
+  const out = document.getElementById(outId);
+  out.textContent = 'Loading...';
+  out.classList.remove('error');
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    try {
+      out.textContent = JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      out.textContent = text;
+    }
+    if (!res.ok) out.classList.add('error');
+  } catch (e) {
+    out.textContent = 'Request failed: ' + e.message;
+    out.classList.add('error');
+  }
+}
+
+function callWeather() {
+  const city = document.getElementById('w-city').value;
+  const days = document.getElementById('w-days').value;
+  callAPI(`/weather?city=${encodeURIComponent(city)}&days=${days}`, 'w-out');
+}
+
+function callFlights() {
+  const from = document.getElementById('f-from').value;
+  const to = document.getElementById('f-to').value;
+  const date = document.getElementById('f-date').value;
+  const passengers = document.getElementById('f-pax').value;
+  callAPI(`/flights?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${date}&passengers=${passengers}`, 'f-out');
+}
+
+function callHotels() {
+  const city = document.getElementById('h-city').value;
+  const checkin = document.getElementById('h-in').value;
+  const checkout = document.getElementById('h-out').value;
+  const guests = document.getElementById('h-guests').value;
+  callAPI(`/hotels?city=${encodeURIComponent(city)}&checkin=${checkin}&checkout=${checkout}&guests=${guests}`, 'h-out');
+}
+
+function callItinerary() {
+  const destination = document.getElementById('i-dest').value;
+  const start = document.getElementById('i-start').value;
+  const end = document.getElementById('i-end').value;
+  const people = document.getElementById('i-people').value;
+  const budget = document.getElementById('i-budget').value;
+  const hotel = document.getElementById('i-hotel').value;
+  callAPI(`/itinerary?destination=${encodeURIComponent(destination)}&start=${start}&end=${end}&people=${people}&budget=${budget}&hotel=${encodeURIComponent(hotel)}`, 'i-out');
+}
+</script>
+</body>
+</html>

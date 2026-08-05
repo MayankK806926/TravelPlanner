@@ -3,8 +3,8 @@
 using namespace std;
 
 //This function constructs a new Trip object with the given destination, start date, end date, number of people, and budget
-Trip::Trip(string dest, string start, string end, int count, double budget)
-    : destination(dest), startDate(start), endDate(end), peopleCount(count), budget(budget) {}
+Trip::Trip(string dest, string start, string end, int count, double budget, string currency)
+    : destination(dest), startDate(start), endDate(end), peopleCount(count), budget(budget), currency(currency) {}
 
 //This function displays the trip details
 void Trip::displayTrip() const {
@@ -13,7 +13,7 @@ void Trip::displayTrip() const {
     cout << "Dates: " << startDate << " to " << endDate << endl;
     cout << "People: " << peopleCount << endl;
     if (budget > 0) {
-        cout << "Budget: " << budget << " INR" << endl;
+        cout << "Budget: " << budget << " " << currency << endl;
     }
 }
 

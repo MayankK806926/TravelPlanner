@@ -3,37 +3,35 @@
 #include <limits>
 #include <iomanip>
 #include <curl/curl.h>
+#include <future>
 #include "user.hpp"
 #include "trip.hpp"
 #include "api_handler.hpp"
 #include "itinerary_item.hpp"
 #include "hotel.hpp"
 #include "flight.hpp"
+#include "date_utils.hpp"
+#include "logger.hpp"
 #include <algorithm>
+#ifdef HAVE_PERSISTENCE
+#include "trip_repository.hpp"
+#endif
 
 using namespace std;
 using std::min;
 using std::max;
 
-// Function to get valid date input with validation
+// Function to get valid date input with real calendar validation
 string getDateInput(const string& prompt) {
     while (true) {
         string date;
         cout << prompt;
         getline(cin, date);
-        
-        if (date.length() == 10 && date[4] == '-' && date[7] == '-') {
-            try {
-                int year = stoi(date.substr(0, 4));
-                int month = stoi(date.substr(5, 2));
-                int day = stoi(date.substr(8, 2));
-                
-                if (year >= 2024 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                    return date;
-                }
-            } catch (...) {}
+
+        if (DateUtils::isValidDateString(date)) {
+            return date;
         }
-        cout << "Invalid date format. Please use YYYY-MM-DD format." << endl;
+        cout << "Invalid date. Please use YYYY-MM-DD format with a real calendar date." << endl;
     }
 }
 
@@ -76,16 +74,37 @@ struct FlightJourney {
     int minSeats;
 };
 
+// Groups a flat list of connecting-flight legs into journeys.
+vector<FlightJourney> groupIntoJourneys(const vector<Flight>& flights) {
+    vector<FlightJourney> journeys;
+    for (size_t i = 0; i < flights.size();) {
+        FlightJourney journey;
+        journey.legs.push_back(flights[i]);
+        journey.totalPrice = flights[i].getPrice();
+        journey.minSeats = flights[i].getAvailableSeats();
+        size_t j = i;
+        while (j + 1 < flights.size() &&
+               flights[j].getArrivalAirport() == flights[j + 1].getDepartureAirport()) {
+            ++j;
+            journey.legs.push_back(flights[j]);
+            journey.totalPrice += flights[j].getPrice();
+            journey.minSeats = min(journey.minSeats, flights[j].getAvailableSeats());
+        }
+        journeys.push_back(journey);
+        i = j + 1;
+    }
+    return journeys;
+}
+
 int main() {
     try {
         if (curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK) {
             throw runtime_error("Failed to initialize curl");
         }
-        
+
         cout << "Welcome to the Travel Planner!" << endl;
-        // cout << "Initializing API keys..." << endl;
         APIHandler::initializeAPIKeys();
-        
+
         User currentUser;
         currentUser.registerUser();
         currentUser.displayProfile();
@@ -94,19 +113,15 @@ int main() {
         string destination;
         string startDate, endDate;
         int peopleCount;
-        Flight* selectedOutboundFlight = nullptr;
-        Flight* selectedReturnFlight = nullptr;
-        Hotel* selectedHotel = nullptr;
-        bool isDestinationSelected = false;
         vector<Flight> selectedOutboundLegs;
         vector<Flight> selectedReturnLegs;
-        Trip* trip = nullptr;
+        unique_ptr<Hotel> selectedHotel;
 
+        bool isDestinationSelected = false;
         while (!isDestinationSelected) {
             cout << "\nEnter destination city: ";
             getline(cin, destination);
 
-            // Weather forecast
             try {
                 int forecastDays = getIntegerInput("\nHow many days of weather forecast would you like to see? (1-14): ", 1, 14);
                 cout << "\nFetching weather forecast..." << endl;
@@ -122,7 +137,7 @@ int main() {
 
             startDate = getDateInput("\nEnter start date (YYYY-MM-DD): ");
             endDate = getDateInput("Enter end date (YYYY-MM-DD): ");
-            
+
             if (getYesNoInput("\nConfirm these travel dates?")) {
                 isDestinationSelected = true;
             }
@@ -134,35 +149,28 @@ int main() {
         cout << "\nEnter your boarding city: ";
         getline(cin, boardingCity);
 
-        // Outbound flights
+        // Outbound flights, return flights, and hotels are independent
+        // lookups once destination/dates/boarding city are known - fire
+        // them off concurrently instead of waiting on each in turn.
+        cout << "\nSearching for outbound flights, return flights, and hotels..." << endl;
+        auto outboundFuture = std::async(std::launch::async, [&]() {
+            return APIHandler::searchFlights(boardingCity, destination, startDate, peopleCount);
+        });
+        auto returnFuture = std::async(std::launch::async, [&]() {
+            return APIHandler::searchFlights(destination, boardingCity, endDate, peopleCount);
+        });
+        auto hotelsFuture = std::async(std::launch::async, [&]() {
+            return APIHandler::searchHotels(destination, startDate, endDate, peopleCount);
+        });
+
         vector<Flight> outboundFlights;
         try {
-            cout << "\nSearching for outbound flights..." << endl;
-            cout << "From: " << boardingCity << " To: " << destination << endl;
-            outboundFlights = APIHandler::searchFlights(boardingCity, destination, startDate, peopleCount);
+            outboundFlights = outboundFuture.get();
         } catch (const std::exception& e) {
             cout << "\n[Warning] Outbound flight search failed: " << e.what() << endl;
         }
-        vector<FlightJourney> outboundJourneys;
-        if (!outboundFlights.empty()) {
-            // Group flights into journeys (connecting flights)
-            for (size_t i = 0; i < outboundFlights.size();) {
-                FlightJourney journey;
-                journey.legs.push_back(outboundFlights[i]);
-                journey.totalPrice = outboundFlights[i].getPrice();
-                journey.minSeats = outboundFlights[i].getAvailableSeats();
-                size_t j = i;
-                // Group connecting legs
-                while (j + 1 < outboundFlights.size() &&
-                       outboundFlights[j].getArrivalAirport() == outboundFlights[j + 1].getDepartureAirport()) {
-                    ++j;
-                    journey.legs.push_back(outboundFlights[j]);
-                    journey.totalPrice += outboundFlights[j].getPrice();
-                    journey.minSeats = min(journey.minSeats, outboundFlights[j].getAvailableSeats());
-                }
-                outboundJourneys.push_back(journey);
-                i = j + 1;
-            }
+        vector<FlightJourney> outboundJourneys = groupIntoJourneys(outboundFlights);
+        if (!outboundJourneys.empty()) {
             size_t numOptions = min(size_t(5), outboundJourneys.size());
             cout << "\nAvailable Flight Options (Connecting flights grouped):" << endl;
             for (size_t i = 0; i < numOptions; ++i) {
@@ -172,11 +180,10 @@ int main() {
                     outboundJourneys[i].legs[leg].displayInfo();
                     outboundJourneys[i].legs[leg].displayPrice();
                 }
-                cout << "Total Journey Price: " << fixed << setprecision(2) << outboundJourneys[i].totalPrice << " INR" << endl;
+                cout << "Total Journey Price: " << fixed << setprecision(2) << outboundJourneys[i].totalPrice << " " << APIHandler::CURRENCY_CODE << endl;
                 cout << "Minimum Available Seats: " << outboundJourneys[i].minSeats << endl;
                 cout << string(50, '-') << endl;
             }
-            // Select outbound journey
             while (true) {
                 int choice = getIntegerInput("\nSelect an outbound flight (1-" + to_string(numOptions) + "): ", 1, numOptions);
                 selectedOutboundLegs = outboundJourneys[choice - 1].legs;
@@ -187,8 +194,8 @@ int main() {
                     selectedOutboundLegs[leg].displayInfo();
                     selectedOutboundLegs[leg].displayPrice();
                 }
-                cout << "Total Journey Price: " << fixed << setprecision(2) << outboundJourneys[choice - 1].totalPrice << " INR" << endl;
-                cout << "Current total cost: " << totalCost << " INR" << endl;
+                cout << "Total Journey Price: " << fixed << setprecision(2) << outboundJourneys[choice - 1].totalPrice << " " << APIHandler::CURRENCY_CODE << endl;
+                cout << "Current total cost: " << totalCost << " " << APIHandler::CURRENCY_CODE << endl;
                 if (getYesNoInput("Confirm this outbound journey?")) break;
                 totalCost -= outboundJourneys[choice - 1].totalPrice * peopleCount;
                 selectedOutboundLegs.clear();
@@ -197,36 +204,15 @@ int main() {
             cout << "\nNo outbound flights found or failed to fetch. Continuing to next step..." << endl;
         }
 
-        // Return flights
         vector<Flight> returnFlights;
-        size_t numOptions = 0; // Declare numOptions at the right scope
         try {
-            cout << "\nSearching for return flights..." << endl;
-            cout << "From: " << destination << " To: " << boardingCity << endl;
-            returnFlights = APIHandler::searchFlights(destination, boardingCity, endDate, peopleCount);
+            returnFlights = returnFuture.get();
         } catch (const std::exception& e) {
             cout << "\n[Warning] Return flight search failed: " << e.what() << endl;
         }
-        vector<FlightJourney> returnJourneys;
-        if (!returnFlights.empty()) {
-            // Group return flights into journeys
-            for (size_t i = 0; i < returnFlights.size();) {
-                FlightJourney journey;
-                journey.legs.push_back(returnFlights[i]);
-                journey.totalPrice = returnFlights[i].getPrice();
-                journey.minSeats = returnFlights[i].getAvailableSeats();
-                size_t j = i;
-                while (j + 1 < returnFlights.size() &&
-                       returnFlights[j].getArrivalAirport() == returnFlights[j + 1].getDepartureAirport()) {
-                    ++j;
-                    journey.legs.push_back(returnFlights[j]);
-                    journey.totalPrice += returnFlights[j].getPrice();
-                    journey.minSeats = min(journey.minSeats, returnFlights[j].getAvailableSeats());
-                }
-                returnJourneys.push_back(journey);
-                i = j + 1;
-            }
-            numOptions = min(size_t(5), returnJourneys.size());
+        vector<FlightJourney> returnJourneys = groupIntoJourneys(returnFlights);
+        if (!returnJourneys.empty()) {
+            size_t numOptions = min(size_t(5), returnJourneys.size());
             cout << "\nAvailable Return Flight Options (Connecting flights grouped):" << endl;
             for (size_t i = 0; i < numOptions; ++i) {
                 cout << "\nOption " << (i + 1) << ":" << endl;
@@ -235,11 +221,10 @@ int main() {
                     returnJourneys[i].legs[leg].displayInfo();
                     returnJourneys[i].legs[leg].displayPrice();
                 }
-                cout << "Total Journey Price: " << fixed << setprecision(2) << returnJourneys[i].totalPrice << " INR" << endl;
+                cout << "Total Journey Price: " << fixed << setprecision(2) << returnJourneys[i].totalPrice << " " << APIHandler::CURRENCY_CODE << endl;
                 cout << "Minimum Available Seats: " << returnJourneys[i].minSeats << endl;
                 cout << string(50, '-') << endl;
             }
-            // Select return journey
             while (true) {
                 int choice = getIntegerInput("\nSelect a return flight (1-" + to_string(numOptions) + "): ", 1, numOptions);
                 selectedReturnLegs = returnJourneys[choice - 1].legs;
@@ -250,8 +235,8 @@ int main() {
                     selectedReturnLegs[leg].displayInfo();
                     selectedReturnLegs[leg].displayPrice();
                 }
-                cout << "Total Journey Price: " << fixed << setprecision(2) << returnJourneys[choice - 1].totalPrice << " INR" << endl;
-                cout << "Current total cost: " << totalCost << " INR" << endl;
+                cout << "Total Journey Price: " << fixed << setprecision(2) << returnJourneys[choice - 1].totalPrice << " " << APIHandler::CURRENCY_CODE << endl;
+                cout << "Current total cost: " << totalCost << " " << APIHandler::CURRENCY_CODE << endl;
                 if (getYesNoInput("Confirm this return journey?")) break;
                 totalCost -= returnJourneys[choice - 1].totalPrice * peopleCount;
                 selectedReturnLegs.clear();
@@ -260,11 +245,9 @@ int main() {
             cout << "\nNo return flights found or failed to fetch. Continuing to next step..." << endl;
         }
 
-        // Hotels
         vector<Hotel> hotels;
         try {
-            cout << "\nSearching for available hotels..." << endl;
-            hotels = APIHandler::searchHotels(destination, startDate, endDate, peopleCount);
+            hotels = hotelsFuture.get();
         } catch (const std::exception& e) {
             cout << "\n[Warning] Hotel search failed: " << e.what() << endl;
         }
@@ -276,16 +259,15 @@ int main() {
             }
 
             while (true) {
-                int choice = getIntegerInput("\nSelect a hotel (1-" + to_string(hotels.size()) + "): ", 
+                int choice = getIntegerInput("\nSelect a hotel (1-" + to_string(hotels.size()) + "): ",
                                            1, hotels.size());
-                selectedHotel = new Hotel(hotels[choice - 1]);
+                selectedHotel = make_unique<Hotel>(hotels[choice - 1]);
                 totalCost += selectedHotel->getPricePerNight() * peopleCount;
-                
-                cout << "\nCurrent total cost: " << totalCost << " INR" << endl;
+
+                cout << "\nCurrent total cost: " << totalCost << " " << APIHandler::CURRENCY_CODE << endl;
                 if (getYesNoInput("Confirm this hotel?")) break;
                 totalCost -= selectedHotel->getPricePerNight() * peopleCount;
-                delete selectedHotel;
-                selectedHotel = nullptr;
+                selectedHotel.reset();
             }
         } else {
             cout << "\nNo hotels found or failed to fetch. Continuing to next step..." << endl;
@@ -295,26 +277,21 @@ int main() {
         vector<ItineraryItem> generatedItinerary;
         try {
             cout << "\nGenerating personalized itinerary..." << endl;
-            if (!hotels.empty() && selectedHotel) {
+            if (selectedHotel) {
                 generatedItinerary = APIHandler::generateItinerary(destination, startDate, endDate, peopleCount, totalCost, *selectedHotel);
             } else {
-                // Use a dummy hotel if none selected
-                Hotel dummyHotel("Hotel", destination, 0, 0, startDate, endDate, "");
+                Hotel dummyHotel("Hotel", destination, 0, 0, startDate, endDate, "", APIHandler::CURRENCY_CODE);
                 generatedItinerary = APIHandler::generateItinerary(destination, startDate, endDate, peopleCount, totalCost, dummyHotel);
             }
         } catch (const std::exception& e) {
             cout << "\n[Warning] Itinerary generation failed: " << e.what() << endl;
         }
-        // Ensure trip is created before adding itinerary or printing plan
-        if (!trip) {
-            trip = new Trip(destination, startDate, endDate, peopleCount, totalCost);
-            currentUser.setTrip(trip);
+
+        auto trip = make_unique<Trip>(destination, startDate, endDate, peopleCount, totalCost, APIHandler::CURRENCY_CODE);
+        for (const auto& item : generatedItinerary) {
+            trip->addItineraryItem(item);
         }
-        if (!generatedItinerary.empty()) {
-            for (const auto& item : generatedItinerary) {
-                trip->addItineraryItem(item);
-            }
-        } else {
+        if (generatedItinerary.empty()) {
             cout << "\nNo itinerary generated." << endl;
         }
 
@@ -337,13 +314,21 @@ int main() {
         else cout << "No hotel selected." << endl;
         cout << "\nDaily Itinerary:" << endl;
         trip->displayItinerary();
-        cout << "\nTotal Trip Cost: " << fixed << setprecision(2) << totalCost << " INR" << endl;
+        cout << "\nTotal Trip Cost: " << fixed << setprecision(2) << totalCost << " " << APIHandler::CURRENCY_CODE << endl;
 
         cout << "\nThank you for using our service! Happy Journey!" << endl;
 
-        delete selectedOutboundFlight;
-        delete selectedReturnFlight;
-        delete selectedHotel;
+#ifdef HAVE_PERSISTENCE
+        try {
+            TripRepository repo;
+            long long userId = repo.saveUser(currentUser.getUsername(), currentUser.getEmail());
+            repo.saveTrip(userId, *trip);
+        } catch (const std::exception& e) {
+            cout << "\n[Warning] Could not save trip: " << e.what() << endl;
+        }
+#endif
+
+        currentUser.setTrip(std::move(trip));
         curl_global_cleanup();
         return 0;
     } catch (const exception& e) {

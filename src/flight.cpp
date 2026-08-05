@@ -4,12 +4,12 @@
 #include <ctime>
 using namespace std;
 
-Flight::Flight(string airline, string flightNum, string depAirport, 
-               string arrAirport, tm depTime, tm arrTime, 
-               double price, int seats)
+Flight::Flight(string airline, string flightNum, string depAirport,
+               string arrAirport, tm depTime, tm arrTime,
+               double price, int seats, string currency)
     : airline(airline), flightNumber(flightNum), departureAirport(depAirport),
       arrivalAirport(arrAirport), departureTime(depTime), arrivalTime(arrTime),
-      price(price), availableSeats(seats) {}
+      price(price), availableSeats(seats), currency(currency) {}
 
 void Flight::displayInfo() const {
     char depTimeStr[80], arrTimeStr[80];
@@ -22,7 +22,7 @@ void Flight::displayInfo() const {
 }
 
 void Flight::displayPrice() const {
-    cout << "Price: " << fixed << setprecision(2) << price << " INR" << endl;
+    cout << "Price: " << fixed << setprecision(2) << price << " " << currency << endl;
     cout << "Available seats: " << availableSeats << endl;
 }
 

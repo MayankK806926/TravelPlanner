@@ -1,0 +1,22 @@
+# Build output
+build*/
+*.exe
+*.o
+*.obj
+CMakeFiles/
+CMakeCache.txt
+
+# Runtime dependencies (fetched/installed locally, not committed)
+*.dll
+third_party/
+
+# Local secrets - use env vars instead (see README)
+config/api_keys.json
+
+# SQLite data
+*.db
+*.sqlite3
+
+# Editor / OS
+.vscode/
+Thumbs.db

@@ -1,237 +1,123 @@
 # TravelPlanner :airplane: :hotel: :partly_sunny:
 
-TravelPlanner is a C++ console application that helps users plan trips by integrating flight/hotel searches, weather forecasts, and AI-powered itinerary generation. The project demonstrates OOP principles and API integration with Gemini AI, Amadeus Travel API, and WeatherAPI.
+TravelPlanner is a C++17 travel-planning application that integrates flight
+and hotel search, weather forecasts, and AI-generated itineraries. It ships
+as both an interactive CLI and a REST API server with a small web frontend.
 
 ## Features :sparkles:
-- **User Registration**: Create and manage travel profiles
-- **Multi-API Integration**:
-  - Flight search (Amadeus API)
-  - Hotel recommendations (Gemini AI)
-  - Weather forecasts (WeatherAPI)
-- **Smart Itinerary Generation**: AI-powered daily plans
-- **Cost Calculation**: Real-time budget tracking
-- **Connection Handling**: Automatic grouping of connecting flights
-- **Error Resilience**: Retry mechanisms for API failures
+- **Multi-API integration**: flights (Amadeus), hotels + itineraries (Gemini structured output), weather (WeatherAPI)
+- **Concurrent lookups**: independent flight/hotel searches run in parallel via `std::async`
+- **Resilience**: exponential-backoff retry plus a per-service circuit breaker
+- **Caching**: in-memory IATA-code and weather caches cut latency and API spend
+- **Persistence**: trips and itineraries stored in SQLite, surviving restarts
+- **Multi-currency**: currency configurable via `CURRENCY_CODE`, not hardcoded
+- **Two frontends**: interactive CLI and a Crow-based REST API with a demo web UI
+
+## Architecture :building_construction:
+
+The build is split so that pure logic is testable without a network stack:
+
+| Target | Contents | Dependencies |
+|---|---|---|
+| `travelplanner_core` | Domain models, flight-offer parsing, date validation, logging, circuit breaker | none |
+| `travelplanner_persistence` | SQLite trip/user repository | SQLite3 |
+| `travelplanner_api` | HTTP client, Amadeus/Gemini/Weather integration | libcurl |
+| `travel_planner` | Interactive CLI | above |
+| `travel_planner_server` | REST API + web demo | above + Crow |
+| `travelplanner_tests` | Catch2 unit tests | `travelplanner_core` only |
+
+Unit tests link only the pure core, so CI can run them without libcurl.
 
 ## Prerequisites :warning:
-- C++17 compiler (GCC/MinGW on Windows)
-- [libcurl](https://curl.se/windows/) installed
-- API keys for:
-  - [Google Gemini](https://aistudio.google.com/)
-  - [Amadeus Travel APIs](https://developers.amadeus.com/)
-  - [WeatherAPI](https://www.weatherapi.com/)
+- C++17 compiler (GCC 9+, Clang 10+, or MSVC 2019+)
+- CMake 3.16+
+- libcurl development headers (for the executables)
+- SQLite3 development headers (for persistence; optional)
 
-## Installation & Setup :wrench:
-1. **Install libcurl**:
-   - Windows: Download [prebuilt binaries](https://curl.se/windows/)
-   - Linux/macOS: `sudo apt-get install libcurl4-openssl-dev` / `brew install curl`
+Crow and Catch2 are fetched automatically by CMake.
 
-2. **Configure API keys**:
+## Configuration :key:
+
+API credentials are read from **environment variables**. Never commit keys.
+
 ```bash
-mkdir config
-echo '{
-  "gemini": {"api_key": "YOUR_GEMINI_KEY"},
-  "amadeus": {
-    "client_id": "YOUR_AMADEUS_ID",
-    "client_secret": "YOUR_AMADEUS_SECRET"
-  },
-  "weather": {"api_key": "YOUR_WEATHERAPI_KEY"}
-}' > config/api_keys.json
+export GEMINI_API_KEY=your_gemini_key
+export AMADEUS_CLIENT_ID=your_amadeus_id
+export AMADEUS_CLIENT_SECRET=your_amadeus_secret
+export WEATHER_API_KEY=your_weatherapi_key
+export CURRENCY_CODE=INR   # optional, defaults to INR
 ```
 
-## Building & Running :computer:
-### Compile (adjust include/library paths as needed)
-```
-g++ -std=c++17 src/*.cpp -I include -I "path/to/curl/include" -L "path/to/curl/lib" -lcurl -o travel_planner
+For local development you may instead copy `config/api_keys.json.example` to
+`config/api_keys.json` and fill it in — that file is gitignored and is only
+used as a fallback when the environment variables are unset.
+
+Get keys from [Google Gemini](https://aistudio.google.com/),
+[Amadeus](https://developers.amadeus.com/), and
+[WeatherAPI](https://www.weatherapi.com/).
+
+## Building :computer:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
 ```
 
-### Run
-```
-./travel_planner
+Useful options: `-DBUILD_TESTS=OFF`, `-DBUILD_SERVER=OFF`, `-DBUILD_APP=OFF`
+(tests only), `-DWITH_PERSISTENCE=OFF`.
+
+## Running tests :test_tube:
+
+```bash
+cd build && ctest --output-on-failure
 ```
 
-## Sample Workflow :arrow_forward:
+## Running :arrow_forward:
+
+Interactive CLI:
+
+```bash
+./build/travel_planner
+```
+
+REST API server plus web demo (defaults to port 8080, override with `PORT`):
+
+```bash
+./build/travel_planner_server
+```
+
+Then open <http://localhost:8080> for the demo UI, or call the API directly:
+
+| Method | Endpoint | Parameters |
+|---|---|---|
+| GET/POST | `/weather` | `city`, `days` |
+| GET/POST | `/flights` | `from`, `to`, `date`, `passengers` |
+| GET/POST | `/hotels` | `city`, `checkin`, `checkout`, `guests` |
+| GET/POST | `/itinerary` | `destination`, `start`, `end`, `people`, `budget`, `hotel` |
+
+```bash
+curl "http://localhost:8080/weather?city=Bangalore&days=3"
+```
+
+Run the server from the repository root so it can find `web/index.html`.
+
+## Sample CLI workflow :arrow_forward:
 1. Register with username/email
-2. Enter destination city (e.g., "Paris")
-3. View weather forecast
-4. Set travel dates (YYYY-MM-DD)
-5. Choose flights:
-   - Outbound journey (groups connecting flights)
-   - Return journey
-6. Select hotel from recommendations
-7. Generate personalized itinerary
-8. View complete travel plan with cost breakdown
+2. Enter destination city and view the weather forecast
+3. Set travel dates (validated against the real calendar)
+4. Pick outbound and return journeys (connecting flights grouped automatically)
+5. Select a hotel from AI-generated recommendations
+6. Review the generated itinerary and total cost — saved to SQLite on exit
 
 ## Project Structure :file_folder:
 ```
 TravelPlanner/
+├── .github/workflows/ci.yml   # Build + test on Linux and Windows
+├── CMakeLists.txt
 ├── config/
-│   └── api_keys.json       # API credentials
-├── include/                # Header files
-│   ├── api_handler.hpp     # API integration
-│   ├── flight.hpp          # Flight data model
-│   ├── hotel.hpp           # Hotel data model
-│   ├── itinerary_item.hpp  # Day plans
-│   ├── trip.hpp            # Trip container
-│   └── user.hpp            # User profile
-├── src/                    # Implementation
-│   ├── api_handler.cpp     # API logic
-│   ├── flight.cpp          # Flight methods
-│   ├── hotel.cpp           # Hotel methods
-│   ├── itinerary_item.cpp  # Itinerary methods
-│   ├── main.cpp            # Entry point
-│   ├── trip.cpp            # Trip management
-│   └── user.cpp            # User operations
-└── travel_planner          # Compiled binary
-```
-## Exmaple of plan prepared by TravelPlanner
-```
-=== Your Complete Travel Plan ===
-
-Trip Details:
-Destination: Bangalore
-Dates: 2025-06-04 to 2025-06-10
-People: 4
-Budget: 48739.00 INR
-
-Selected Outbound Journey:
-  Leg 1: AI 2803
-DEL (2025-06-04 06:25) to BLR (2025-06-04 09:25)
-Price: 3085.00 INR
-Available seats: 9
-
-Selected Return Journey:
-  Leg 1: AI 2804
-BLR (2025-06-10 10:20) to DEL (2025-06-10 13:15)
-Price: 3099.00 INR
-Available seats: 9
-
-Selected Hotel:
-Hotel: The Taj West End
-Rating: 5.00 stars
-Total Stay Cost: 6000.00 INR
-Address: 25, Race Course Road, Bengaluru, Karnataka 560001, India
-
-Daily Itinerary:
-
-Itinerary for Bangalore:
-Date: 2025-06-04
-Time: 14:00
-Activity: Check-in at The Taj West End
-Category: Accommodation
--------------------
-Date: 2025-06-04
-Time: 10:00
-Activity: Visit Bangalore Palace
-Category: Sightseeing
--------------------
-Date: 2025-06-04
-Time: 10:30
-Activity: Modeled after Windsor Castle, it showcases Tudor architecture and houses historical artifacts.
-Category: Information
--------------------
-Date: 2025-06-04
-Time: 09:30
-Activity: Transportation: Auto-rickshaw or cab from city center.
-Category: Transport
--------------------
-Date: 2025-06-05
-Time: 10:00
-Activity: Visit Tipu Sultan's Summer Palace
-Category: Sightseeing
--------------------
-Date: 2025-06-05
-Time: 10:30
-Activity: A beautiful wooden structure built in the Indo-Islamic style, used as Tipu Sultan's summer retreat.
-Category: Information
--------------------
-Date: 2025-06-05
-Time: 09:30
-Activity: Transportation: Metro (nearest station is KR Market) or bus.
-Category: Transport
--------------------
-Date: 2025-06-06
-Time: 10:00
-Activity: Visit Lal Bagh Botanical Garden
-Category: Sightseeing
--------------------
-Date: 2025-06-06
-Time: 10:30
-Activity: A sprawling botanical garden with diverse flora, a glasshouse, and a historical rock formation.
-Category: Information
--------------------
-Date: 2025-06-06
-Time: 09:30
-Activity: Transportation: Metro (Lal Bagh station) or bus.
-Category: Transport
--------------------
-Date: 2025-06-07
-Time: 10:00
-Activity: Visit Vidhana Soudha
-Category: Sightseeing
--------------------
-Date: 2025-06-07
-Time: 10:30
-Activity: An impressive neo-Dravidian granite building housing the Karnataka State Legislative Assembly.
-Category: Information
--------------------
-Date: 2025-06-07
-Time: 09:30
-Activity: Transportation: Metro (nearest station is Vidhana Soudha) or bus.
-Category: Transport
--------------------
-Date: 2025-06-08
-Time: 10:00
-Activity: Visit ISKCON Temple Bangalore
-Category: Sightseeing
--------------------
-Date: 2025-06-08
-Time: 10:30
-Activity: A magnificent temple dedicated to Lord Krishna, known for its spiritual atmosphere and architectural grandeur.
-Category: Information
--------------------
-Date: 2025-06-08
-Time: 09:30
-Activity: Transportation: Bus or auto-rickshaw from city center.
-Category: Transport
--------------------
-Date: 2025-06-09
-Time: 10:00
-Activity: Visit Cubbon Park
-Category: Sightseeing
--------------------
-Date: 2025-06-09
-Time: 10:30
-Activity: A green lung in the city center, offering walking paths, gardens, and historical buildings.
-Category: Information
--------------------
-Date: 2025-06-09
-Time: 09:30
-Activity: Transportation: Metro (nearest station is Cubbon Park) or bus.
-Category: Transport
--------------------
-Date: 2025-06-10
-Time: 10:00
-Activity: Visit Commercial Street
-Category: Sightseeing
--------------------
-Date: 2025-06-10
-Time: 10:30
-Activity: A bustling street known for its diverse shopping options, from clothing to accessories.
-Category: Information
--------------------
-Date: 2025-06-10
-Time: 09:30
-Activity: Transportation: Auto-rickshaw or bus from city center.
-Category: Transport
--------------------
-Date: 2025-06-10
-Time: 11:00
-Activity: Check-out from The Taj West End
-Category: Accommodation
--------------------
-
-Total Trip Cost: 48739.00 INR
-
-Thank you for using our service! Happy Journey!
+│   └── api_keys.json.example  # Template; real file is gitignored
+├── include/                   # Public headers
+├── src/                       # Implementation
+├── tests/                     # Catch2 unit tests
+└── web/index.html             # Demo frontend for the REST API
 ```

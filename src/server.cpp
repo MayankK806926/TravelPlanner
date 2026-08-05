@@ -1,15 +1,42 @@
 #define CROW_MAIN
-#include "crow_all.h"
+#include <crow.h>
+#include <crow/middlewares/cors.h>
 #include "api_handler.hpp"
-#include <nlohmann/json.hpp>
+#include "logger.hpp"
 #include <string>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
 
 using namespace std;
 using json = nlohmann::json;
 
 int main() {
-    crow::SimpleApp app;
+    crow::App<crow::CORSHandler> app;
     APIHandler::initializeAPIKeys();
+    Logger::info("TravelPlanner API server starting up");
+
+    // Permissive CORS for local demo purposes only - do not use this
+    // configuration as-is in a production deployment.
+    auto& cors = app.get_middleware<crow::CORSHandler>();
+    cors.global().origin("*").methods("GET"_method, "POST"_method);
+
+    // Serve the demo frontend at the site root.
+    CROW_ROUTE(app, "/")
+    ([]() {
+        crow::response res;
+        std::ifstream file("web/index.html");
+        if (!file) {
+            res.code = 404;
+            res.body = "Demo frontend not found (web/index.html missing)";
+            return res;
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        res.set_header("Content-Type", "text/html");
+        res.body = buffer.str();
+        return res;
+    });
 
     CROW_ROUTE(app, "/weather").methods("GET"_method)
     ([](const crow::request& req) {
@@ -98,7 +125,7 @@ int main() {
         int people = std::stoi(people_str);
         double budget = std::stod(budget_str);
         // For demo, create a dummy hotel (in real use, parse hotel JSON or fetch from DB)
-        Hotel selectedHotel(hotel, destination, 0, 0, start, end, "");
+        Hotel selectedHotel(hotel, destination, 0, 0, start, end, "", APIHandler::CURRENCY_CODE);
         try {
             auto items = APIHandler::generateItinerary(destination, start, end, people, budget, selectedHotel);
             json arr = json::array();
@@ -189,7 +216,7 @@ int main() {
             if (destination.empty() || start.empty() || end.empty() || hotelName.empty()) {
                 return crow::response(400, "Missing required parameters in JSON body");
             }
-            Hotel selectedHotel(hotelName, destination, 0, 0, start, end, "");
+            Hotel selectedHotel(hotelName, destination, 0, 0, start, end, "", APIHandler::CURRENCY_CODE);
             auto items = APIHandler::generateItinerary(destination, start, end, people, budget, selectedHotel);
             json arr = json::array();
             for (const auto& item : items) {
@@ -206,6 +233,11 @@ int main() {
         }
     });
 
-    app.port(8080).multithreaded().run();
+    int port = 8080;
+    if (const char* portEnv = getenv("PORT")) {
+        try { port = stoi(portEnv); } catch (...) {}
+    }
+    Logger::info("Listening on http://localhost:" + to_string(port));
+    app.port(port).multithreaded().run();
     return 0;
 }

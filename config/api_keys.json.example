@@ -1,0 +1,12 @@
+{
+    "gemini": {
+        "api_key": "YOUR_API_KEY_HERE"
+    },
+    "amadeus": {
+        "client_id": "YOUR_CLIENT_ID_HERE",
+        "client_secret": "YOUR_CLIENT_SECRET_HERE"
+    },
+    "weather": {
+        "api_key": "YOUR_WEATHER_API_KEY_HERE"
+    }
+}
