@@ -49,7 +49,7 @@ export CURRENCY_CODE=INR   # optional, defaults to INR
 ```
 
 For local development you may instead copy `config/api_keys.json.example` to
-`config/api_keys.json` and fill it in — that file is gitignored and is only
+`config/api_keys.json` and fill it in - that file is gitignored and is only
 used as a fallback when the environment variables are unset.
 
 Get keys from [Google Gemini](https://aistudio.google.com/),
@@ -107,7 +107,7 @@ Run the server from the repository root so it can find `web/index.html`.
 3. Set travel dates (validated against the real calendar)
 4. Pick outbound and return journeys (connecting flights grouped automatically)
 5. Select a hotel from AI-generated recommendations
-6. Review the generated itinerary and total cost — saved to SQLite on exit
+6. Review the generated itinerary and total cost - saved to SQLite on exit
 
 ## Project Structure :file_folder:
 ```
