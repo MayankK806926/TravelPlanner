@@ -23,6 +23,7 @@ add_library(travelplanner_core STATIC
     src/logger.cpp
     src/date_utils.cpp
     src/flight_parser.cpp
+    src/flight_provider.cpp
     src/circuit_breaker.cpp
 )
 target_include_directories(travelplanner_core PUBLIC include)
@@ -104,6 +105,7 @@ if(BUILD_TESTS)
         tests/test_date_utils.cpp
         tests/test_flight_parsing.cpp
         tests/test_retry.cpp
+        tests/test_flight_provider.cpp
     )
     target_link_libraries(travelplanner_tests PRIVATE travelplanner_core Catch2::Catch2WithMain)
 

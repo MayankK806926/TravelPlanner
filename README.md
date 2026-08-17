@@ -5,7 +5,8 @@ and hotel search, weather forecasts, and AI-generated itineraries. It ships
 as both an interactive CLI and a REST API server with a small web frontend.
 
 ## Features :sparkles:
-- **Multi-API integration**: flights (Amadeus), hotels + itineraries (Gemini structured output), weather (WeatherAPI)
+- **Multi-API integration**: flights (pluggable provider), hotels + itineraries (Gemini structured output), weather (WeatherAPI)
+- **Swappable flight backends**: Amadeus, an AI estimator, or an offline mock - selected by configuration
 - **Concurrent lookups**: independent flight/hotel searches run in parallel via `std::async`
 - **Resilience**: exponential-backoff retry plus a per-service circuit breaker
 - **Caching**: in-memory IATA-code and weather caches cut latency and API spend
@@ -45,7 +46,8 @@ export GEMINI_API_KEY=your_gemini_key
 export AMADEUS_CLIENT_ID=your_amadeus_id
 export AMADEUS_CLIENT_SECRET=your_amadeus_secret
 export WEATHER_API_KEY=your_weatherapi_key
-export CURRENCY_CODE=INR   # optional, defaults to INR
+export CURRENCY_CODE=INR       # optional, defaults to INR
+export FLIGHT_PROVIDER=auto    # optional: auto | amadeus | gemini | mock
 ```
 
 For local development you may instead copy `config/api_keys.json.example` to
@@ -55,6 +57,28 @@ used as a fallback when the environment variables are unset.
 Get keys from [Google Gemini](https://aistudio.google.com/),
 [Amadeus](https://developers.amadeus.com/), and
 [WeatherAPI](https://www.weatherapi.com/).
+
+### Flight providers :airplane:
+
+Flight inventory is the one dependency with no reliably available free tier,
+so it sits behind a `FlightProvider` interface and is chosen by configuration:
+
+| `FLIGHT_PROVIDER` | Backend | Requires | Bookable? |
+|---|---|---|---|
+| `amadeus` | Amadeus Self-Service GDS | `AMADEUS_CLIENT_ID` + `AMADEUS_CLIENT_SECRET` | **Yes** - real inventory |
+| `gemini` | AI-generated route estimates | `GEMINI_API_KEY` | No - estimates only |
+| `mock` | Deterministic offline data | nothing | No - synthetic |
+| `auto` (default) | First of the above that is configured | - | depends |
+
+> **Important:** only the `amadeus` backend returns real, bookable flights.
+> The `gemini` and `mock` backends produce representative options useful for
+> planning and budgeting, but their flight numbers and fares are **not real**
+> and cannot be booked. This is surfaced everywhere it matters: each result
+> carries a `source` field, the REST API returns a `bookable` flag, the CLI
+> tags estimates inline, and the web UI shows a warning banner.
+>
+> If you do not have Amadeus credentials, the app still runs end to end -
+> it just falls back to estimated flight data.
 
 ## Building :computer:
 
@@ -97,6 +121,24 @@ Then open <http://localhost:8080> for the demo UI, or call the API directly:
 
 ```bash
 curl "http://localhost:8080/weather?city=Bangalore&days=3"
+```
+
+`/flights` wraps its results with the provenance of the data, so a client can
+tell live inventory from an estimate:
+
+```json
+{
+  "provider": "mock",
+  "bookable": false,
+  "flights": [
+    {
+      "airline": "AI", "flightNumber": "1000",
+      "departureAirport": "DEL", "arrivalAirport": "BAN",
+      "price": 3705.0, "currency": "INR",
+      "availableSeats": 6, "source": "mock"
+    }
+  ]
+}
 ```
 
 Run the server from the repository root so it can find `web/index.html`.

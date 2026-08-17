@@ -5,9 +5,8 @@
 #include <vector>
 #include "flight.hpp"
 
-// Pure parsing of an Amadeus flight-offers response payload. Deliberately
-// free of any network/curl dependency so it can be unit tested directly
-// against recorded API responses.
+// Pure parsing of flight payloads. Deliberately free of any network/curl
+// dependency so it can be unit tested directly against recorded responses.
 namespace FlightParser {
 
 // Parses offers, sorted cheapest-first, skipping individual malformed
@@ -15,6 +14,13 @@ namespace FlightParser {
 // itself is not parseable JSON or reports an API-level error.
 std::vector<Flight> parseAmadeusFlightOffers(const std::string& response,
                                              const std::string& currency = "INR");
+
+// Parses the schema-constrained JSON array produced by the Gemini flight
+// estimator. Results are marked with source "estimate" - they are
+// representative options, not bookable inventory.
+std::vector<Flight> parseEstimatedFlights(const std::string& json,
+                                          const std::string& date,
+                                          const std::string& currency = "INR");
 
 } // namespace FlightParser
 

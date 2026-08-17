@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include "api_handler.hpp"
 #include "flight_parser.hpp"
+#include "flight_provider.hpp"
 #include "retry.hpp"
 #include "circuit_breaker.hpp"
 #include "logger.hpp"
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
 #include <curl/curl.h>
 #include <iomanip>
 
@@ -28,6 +30,7 @@ string APIHandler::AMADEUS_FLIGHT_URL = "https://test.api.amadeus.com/v2/shoppin
 string APIHandler::WEATHER_API_KEY;
 string APIHandler::WEATHER_API_URL = "http://api.weatherapi.com/v1";
 string APIHandler::CURRENCY_CODE = "INR";
+string APIHandler::FLIGHT_PROVIDER = "auto";
 
 namespace {
 
@@ -60,30 +63,45 @@ void APIHandler::initializeAPIKeys() {
     WEATHER_API_KEY = getEnvOrEmpty("WEATHER_API_KEY");
     string envCurrency = getEnvOrEmpty("CURRENCY_CODE");
     if (!envCurrency.empty()) CURRENCY_CODE = envCurrency;
+    string envProvider = getEnvOrEmpty("FLIGHT_PROVIDER");
+    if (!envProvider.empty()) FLIGHT_PROVIDER = envProvider;
 
-    if (!GEMINI_API_KEY.empty() && !AMADEUS_CLIENT_ID.empty() &&
-        !AMADEUS_CLIENT_SECRET.empty() && !WEATHER_API_KEY.empty()) {
+    // Amadeus credentials are optional: without them the flight backend
+    // falls back to the Gemini estimator or the offline mock (see
+    // makeFlightProvider). Only fall back to the config file if nothing
+    // at all came from the environment.
+    bool anyFromEnv = !GEMINI_API_KEY.empty() || !WEATHER_API_KEY.empty() ||
+                      !AMADEUS_CLIENT_ID.empty() || !AMADEUS_CLIENT_SECRET.empty();
+    if (anyFromEnv) {
         Logger::info("API keys loaded from environment variables");
-        return;
-    }
-
-    try {
+    } else {
         ifstream config_file("config/api_keys.json");
-        if (!config_file.is_open()) {
-            throw runtime_error("No environment variables set and could not open config/api_keys.json");
+        if (config_file.is_open()) {
+            try {
+                json config = json::parse(config_file);
+                GEMINI_API_KEY = config.value("gemini", json::object()).value("api_key", "");
+                AMADEUS_CLIENT_ID = config.value("amadeus", json::object()).value("client_id", "");
+                AMADEUS_CLIENT_SECRET = config.value("amadeus", json::object()).value("client_secret", "");
+                WEATHER_API_KEY = config.value("weather", json::object()).value("api_key", "");
+                Logger::info("API keys loaded from config/api_keys.json (fallback)");
+            } catch (const exception& e) {
+                throw runtime_error("Error loading API keys: " + string(e.what()));
+            }
+        } else {
+            Logger::warn("No API credentials found - weather and hotel/itinerary "
+                         "features will be unavailable; flights fall back to mock data");
         }
-
-        json config = json::parse(config_file);
-
-        if (GEMINI_API_KEY.empty()) GEMINI_API_KEY = config.value("gemini", json::object()).value("api_key", "");
-        if (AMADEUS_CLIENT_ID.empty()) AMADEUS_CLIENT_ID = config.value("amadeus", json::object()).value("client_id", "");
-        if (AMADEUS_CLIENT_SECRET.empty()) AMADEUS_CLIENT_SECRET = config.value("amadeus", json::object()).value("client_secret", "");
-        if (WEATHER_API_KEY.empty()) WEATHER_API_KEY = config.value("weather", json::object()).value("api_key", "");
-
-        Logger::info("API keys loaded from config/api_keys.json (fallback)");
-    } catch (const exception& e) {
-        throw runtime_error("Error loading API keys: " + string(e.what()));
     }
+
+    // Placeholder values in the sample config are treated as unset so they
+    // never look like working credentials.
+    auto discardPlaceholder = [](string& key) {
+        if (key.rfind("YOUR_", 0) == 0) key.clear();
+    };
+    discardPlaceholder(GEMINI_API_KEY);
+    discardPlaceholder(AMADEUS_CLIENT_ID);
+    discardPlaceholder(AMADEUS_CLIENT_SECRET);
+    discardPlaceholder(WEATHER_API_KEY);
 }
 
 void APIHandler::clearCaches() {
@@ -221,23 +239,25 @@ json APIHandler::getWeatherJson(const string& city, int days) {
     }
 }
 
-// Get Amadeus token
-string APIHandler::getAmadeusToken() {
-    try {
-        string payload = "grant_type=client_credentials&"
-                        "client_id=" + AMADEUS_CLIENT_ID + "&"
-                        "client_secret=" + AMADEUS_CLIENT_SECRET;
-
-        string response = makeHttpRequest(AMADEUS_TOKEN_URL, "POST", payload);
-        json j = json::parse(response);
-
-        if (!j.contains("access_token")) {
-            throw runtime_error("No access_token in response");
-        }
-        return j["access_token"].get<string>();
-    } catch (const exception& e) {
-        throw runtime_error("Error getting Amadeus token: " + string(e.what()));
-    }
+// Builds the configured flight backend once, on first use.
+FlightProvider& APIHandler::flightProvider() {
+    static std::unique_ptr<FlightProvider> provider = [] {
+        FlightProviderConfig config;
+        config.httpRequest = [](const string& url, const string& method,
+                                const string& data, const string& token) {
+            return makeHttpRequest(url, method, data, token);
+        };
+        config.resolveIATA = [](const string& city) { return getIATACode(city); };
+        config.currency = CURRENCY_CODE;
+        config.amadeusClientId = AMADEUS_CLIENT_ID;
+        config.amadeusClientSecret = AMADEUS_CLIENT_SECRET;
+        config.amadeusTokenUrl = AMADEUS_TOKEN_URL;
+        config.amadeusFlightUrl = AMADEUS_FLIGHT_URL;
+        config.geminiApiKey = GEMINI_API_KEY;
+        config.geminiApiUrl = GEMINI_API_URL;
+        return makeFlightProvider(FLIGHT_PROVIDER, config);
+    }();
+    return *provider;
 }
 
 // Helper function to get IATA code using Gemini API, cached per city.
@@ -296,50 +316,17 @@ string APIHandler::urlEncode(const string& str) {
     return encoded;
 }
 
-// Search for flights
+// Search for flights via whichever backend is configured. The provider is
+// built once and reused so the selection is logged a single time.
 vector<Flight> APIHandler::searchFlights(const string& from, const string& to,
                                        const string& date, int passengers) {
-    const string service = "amadeus";
+    FlightProvider& provider = flightProvider();
+    const string service = provider.name();
+
     return retryWithBackoff<vector<Flight>>("Error in searchFlights", [&]() -> vector<Flight> {
         CircuitBreaker::instance().checkAllowed(service);
         try {
-            string token = getAmadeusToken();
-            string fromIATA = getIATACode(from);
-            string toIATA = getIATACode(to);
-
-            json requestBody = {
-                {"currencyCode", CURRENCY_CODE},
-                {"originDestinations", {{
-                    {"id", "1"},
-                    {"originLocationCode", fromIATA},
-                    {"destinationLocationCode", toIATA},
-                    {"departureDateTimeRange", {
-                        {"date", date}
-                    }}
-                }}},
-                {"travelers", {}},
-                {"sources", {"GDS"}},
-                {"searchCriteria", {
-                    {"maxFlightOffers", 10},
-                    {"flightFilters", {
-                        {"cabinRestrictions", {{
-                            {"cabin", "ECONOMY"},
-                            {"coverage", "MOST_SEGMENTS"},
-                            {"originDestinationIds", {"1"}}
-                        }}}
-                    }}
-                }}
-            };
-
-            for (int i = 1; i <= passengers; i++) {
-                requestBody["travelers"].push_back({
-                    {"id", to_string(i)},
-                    {"travelerType", "ADULT"}
-                });
-            }
-
-            string response = makeHttpRequest(AMADEUS_FLIGHT_URL, "POST", requestBody.dump(), token);
-            auto flights = FlightParser::parseAmadeusFlightOffers(response, CURRENCY_CODE);
+            auto flights = provider.search(from, to, date, passengers);
             CircuitBreaker::instance().recordSuccess(service);
             return flights;
         } catch (const exception&) {
@@ -347,6 +334,14 @@ vector<Flight> APIHandler::searchFlights(const string& from, const string& to,
             throw;
         }
     });
+}
+
+string APIHandler::activeFlightProviderName() {
+    return flightProvider().name();
+}
+
+bool APIHandler::flightResultsAreBookable() {
+    return flightProvider().isLiveInventory();
 }
 
 // Search for hotels. Uses Gemini structured output (responseMimeType +

@@ -24,8 +24,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libcurl4-openssl-dev libsqlite3-dev
 
+      # The REST server pulls in Crow + Asio, so it is built on Linux only -
+      # enough to keep server.cpp compiling, without doubling Windows CI time.
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SERVER=OFF
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SERVER=${{ runner.os == 'Linux' && 'ON' || 'OFF' }}
 
       - name: Build
         run: cmake --build build --config Release -j 2

@@ -152,6 +152,14 @@ int main() {
         // Outbound flights, return flights, and hotels are independent
         // lookups once destination/dates/boarding city are known - fire
         // them off concurrently instead of waiting on each in turn.
+        if (!APIHandler::flightResultsAreBookable()) {
+            cout << "\n[Notice] Flight results come from the '"
+                 << APIHandler::activeFlightProviderName()
+                 << "' provider and are ESTIMATES for planning only - they are not\n"
+                    "         real bookable flights. Configure a flight data provider for live inventory."
+                 << endl;
+        }
+
         cout << "\nSearching for outbound flights, return flights, and hotels..." << endl;
         auto outboundFuture = std::async(std::launch::async, [&]() {
             return APIHandler::searchFlights(boardingCity, destination, startDate, peopleCount);

@@ -15,6 +15,7 @@ private:
     double price;
     int availableSeats;
     string currency;
+    string source;  // "amadeus" = live inventory, "estimate"/"mock" = not bookable
 
 public:
     /**
@@ -28,10 +29,13 @@ public:
      * @param price Ticket price
      * @param seats Available seats
      * @param currency ISO currency code for price (default "INR")
+     * @param source Origin of the data: "amadeus" for live bookable
+     *        inventory, "estimate" or "mock" for representative data
      */
     Flight(string airline, string flightNum, string depAirport,
            string arrAirport, tm depTime, tm arrTime,
-           double price, int seats, string currency = "INR");
+           double price, int seats, string currency = "INR",
+           string source = "amadeus");
 
     /**
      * @brief Display flight information
@@ -52,4 +56,9 @@ public:
     tm getArrivalTime() const;
     double getPrice() const;
     int getAvailableSeats() const;
+    string getCurrency() const;
+    string getSource() const;
+
+    // False when the data is an estimate rather than bookable inventory.
+    bool isBookable() const;
 };

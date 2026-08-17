@@ -11,6 +11,34 @@
 using namespace std;
 using json = nlohmann::json;
 
+namespace {
+
+// Flight responses carry the backing provider and whether the results are
+// real bookable inventory, so a client can never mistake an estimate for a
+// flight it can actually buy.
+json serializeFlights(const std::vector<Flight>& flights) {
+    json arr = json::array();
+    for (const auto& f : flights) {
+        arr.push_back({
+            {"airline", f.getAirline()},
+            {"flightNumber", f.getFlightNumber()},
+            {"departureAirport", f.getDepartureAirport()},
+            {"arrivalAirport", f.getArrivalAirport()},
+            {"price", f.getPrice()},
+            {"currency", f.getCurrency()},
+            {"availableSeats", f.getAvailableSeats()},
+            {"source", f.getSource()}
+        });
+    }
+    return json{
+        {"provider", APIHandler::activeFlightProviderName()},
+        {"bookable", APIHandler::flightResultsAreBookable()},
+        {"flights", arr}
+    };
+}
+
+} // namespace
+
 int main() {
     crow::App<crow::CORSHandler> app;
     APIHandler::initializeAPIKeys();
@@ -66,18 +94,7 @@ int main() {
         int passengers = std::stoi(passengers_str);
         try {
             auto flights = APIHandler::searchFlights(from, to, date, passengers);
-            json arr = json::array();
-            for (const auto& f : flights) {
-                arr.push_back({
-                    {"airline", f.getAirline()},
-                    {"flightNumber", f.getFlightNumber()},
-                    {"departureAirport", f.getDepartureAirport()},
-                    {"arrivalAirport", f.getArrivalAirport()},
-                    {"price", f.getPrice()},
-                    {"availableSeats", f.getAvailableSeats()}
-                });
-            }
-            return crow::response(arr.dump());
+            return crow::response(serializeFlights(flights).dump());
         } catch (const std::exception& e) {
             return crow::response(500, e.what());
         }
@@ -156,18 +173,7 @@ int main() {
                 return crow::response(400, "Missing required parameters in JSON body");
             }
             auto flights = APIHandler::searchFlights(from, to, date, passengers);
-            json arr = json::array();
-            for (const auto& f : flights) {
-                arr.push_back({
-                    {"airline", f.getAirline()},
-                    {"flightNumber", f.getFlightNumber()},
-                    {"departureAirport", f.getDepartureAirport()},
-                    {"arrivalAirport", f.getArrivalAirport()},
-                    {"price", f.getPrice()},
-                    {"availableSeats", f.getAvailableSeats()}
-                });
-            }
-            return crow::response(arr.dump());
+            return crow::response(serializeFlights(flights).dump());
         } catch (const std::exception& e) {
             return crow::response(500, e.what());
         }

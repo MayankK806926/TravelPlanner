@@ -65,4 +65,51 @@ std::vector<Flight> parseAmadeusFlightOffers(const std::string& response,
     return flights;
 }
 
+std::vector<Flight> parseEstimatedFlights(const std::string& payload,
+                                          const std::string& date,
+                                          const std::string& currency) {
+    std::vector<Flight> flights;
+    json parsed;
+    try {
+        parsed = json::parse(payload);
+    } catch (const json::exception& e) {
+        throw std::runtime_error("Error parsing estimated flights: " + std::string(e.what()));
+    }
+
+    if (!parsed.is_array()) {
+        throw std::runtime_error("Error parsing estimated flights: expected a JSON array");
+    }
+
+    for (const auto& entry : parsed) {
+        try {
+            std::string airline = entry.at("airline").get<std::string>();
+            std::string flightNumber = entry.at("flight_number").get<std::string>();
+            std::string depAirport = entry.at("departure_airport").get<std::string>();
+            std::string arrAirport = entry.at("arrival_airport").get<std::string>();
+            std::string depTime = entry.at("departure_time").get<std::string>();
+            std::string arrTime = entry.at("arrival_time").get<std::string>();
+            double price = entry.at("price").get<double>();
+            int seats = entry.value("available_seats", 1);
+
+            // The model is asked for HH:MM local times; combine with the
+            // requested travel date to get a full timestamp.
+            tm departure = {}, arrival = {};
+            std::istringstream(date + "T" + depTime) >> std::get_time(&departure, "%Y-%m-%dT%H:%M");
+            std::istringstream(date + "T" + arrTime) >> std::get_time(&arrival, "%Y-%m-%dT%H:%M");
+
+            flights.emplace_back(airline, flightNumber, depAirport, arrAirport,
+                                 departure, arrival, price, seats, currency, "estimate");
+        } catch (const std::exception& e) {
+            Logger::warn(std::string("Skipping malformed estimated flight: ") + e.what());
+            continue;
+        }
+    }
+
+    std::sort(flights.begin(), flights.end(), [](const Flight& a, const Flight& b) {
+        return a.getPrice() < b.getPrice();
+    });
+
+    return flights;
+}
+
 } // namespace FlightParser

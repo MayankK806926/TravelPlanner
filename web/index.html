@@ -15,6 +15,9 @@
   button:hover { background: #1d4ed8; }
   pre { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
   .error { color: #b91c1c; }
+  .notice { margin: 10px 0 0; padding: 10px 12px; border-radius: 6px; font-size: 0.85rem; display: none; }
+  .notice.warn { display: block; background: #fef3c7; border: 1px solid #f59e0b; color: #78350f; }
+  .notice.live { display: block; background: #dcfce7; border: 1px solid #16a34a; color: #14532d; }
 </style>
 </head>
 <body>
@@ -42,6 +45,7 @@
     <div><label>Passengers</label><input id="f-pax" type="number" value="1" min="1"></div>
   </div>
   <button onclick="callFlights()">Search flights</button>
+  <p id="f-notice" class="notice"></p>
   <pre id="f-out"></pre>
 </section>
 
@@ -103,12 +107,44 @@ function callWeather() {
   callAPI(`/weather?city=${encodeURIComponent(city)}&days=${days}`, 'w-out');
 }
 
-function callFlights() {
+async function callFlights() {
   const from = document.getElementById('f-from').value;
   const to = document.getElementById('f-to').value;
   const date = document.getElementById('f-date').value;
   const passengers = document.getElementById('f-pax').value;
-  callAPI(`/flights?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${date}&passengers=${passengers}`, 'f-out');
+  const url = `/flights?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${date}&passengers=${passengers}`;
+
+  const out = document.getElementById('f-out');
+  const notice = document.getElementById('f-notice');
+  out.textContent = 'Loading...';
+  out.classList.remove('error');
+  notice.className = 'notice';
+
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    if (!res.ok) {
+      out.textContent = text;
+      out.classList.add('error');
+      return;
+    }
+    const data = JSON.parse(text);
+    out.textContent = JSON.stringify(data.flights ?? data, null, 2);
+
+    // Never let estimated data pass as something the user could book.
+    if (data.bookable) {
+      notice.className = 'notice live';
+      notice.textContent = `Live inventory via ${data.provider}. These are real bookable flights.`;
+    } else {
+      notice.className = 'notice warn';
+      notice.textContent = `Estimated data (provider: ${data.provider}). These are representative ` +
+        `options for planning and budgeting only - the flight numbers and fares are not real ` +
+        `bookable inventory. Configure a flight data provider for live results.`;
+    }
+  } catch (e) {
+    out.textContent = 'Request failed: ' + e.message;
+    out.classList.add('error');
+  }
 }
 
 function callHotels() {
