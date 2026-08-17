@@ -44,15 +44,15 @@ jobs:
       # CMake degrades gracefully when a dependency is missing, which is good
       # for local builds but means a silently skipped target would otherwise
       # let CI pass green without ever compiling that code. Assert instead.
+      # Asserted unconditionally rather than gated on matrix.build_server:
+      # a check that reads the same variable it is meant to validate would
+      # pass just as silently if that variable were ever wrong.
       - name: Verify expected binaries were built
         if: runner.os == 'Linux'
         run: |
           set -e
           test -x build/travel_planner \
             || { echo "::error::CLI binary missing - libcurl was probably not found"; exit 1; }
-          echo "CLI binary present"
-          if [ "${{ matrix.build_server }}" = "ON" ]; then
-            test -x build/travel_planner_server \
-              || { echo "::error::server binary missing - server.cpp was never compiled"; exit 1; }
-            echo "Server binary present"
-          fi
+          test -x build/travel_planner_server \
+            || { echo "::error::server binary missing - server.cpp was never compiled"; exit 1; }
+          echo "CLI and server binaries both present"
