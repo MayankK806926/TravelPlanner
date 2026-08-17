@@ -13,7 +13,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          # The REST server pulls in Crow + Asio, so it is built on Linux
+          # only - enough to keep server.cpp compiling, without paying the
+          # cost twice.
+          - os: ubuntu-latest
+            build_server: 'ON'
+          - os: windows-latest
+            build_server: 'OFF'
 
     steps:
       - uses: actions/checkout@v4
@@ -24,10 +31,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libcurl4-openssl-dev libsqlite3-dev
 
-      # The REST server pulls in Crow + Asio, so it is built on Linux only -
-      # enough to keep server.cpp compiling, without doubling Windows CI time.
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SERVER=${{ runner.os == 'Linux' && 'ON' || 'OFF' }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SERVER=${{ matrix.build_server }}
 
       - name: Build
         run: cmake --build build --config Release -j 2
@@ -35,3 +40,19 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest --output-on-failure -C Release
+
+      # CMake degrades gracefully when a dependency is missing, which is good
+      # for local builds but means a silently skipped target would otherwise
+      # let CI pass green without ever compiling that code. Assert instead.
+      - name: Verify expected binaries were built
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          test -x build/travel_planner \
+            || { echo "::error::CLI binary missing - libcurl was probably not found"; exit 1; }
+          echo "CLI binary present"
+          if [ "${{ matrix.build_server }}" = "ON" ]; then
+            test -x build/travel_planner_server \
+              || { echo "::error::server binary missing - server.cpp was never compiled"; exit 1; }
+            echo "Server binary present"
+          fi
